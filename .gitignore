@@ -1,0 +1,25 @@
+# Environment (contains passwords)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary
+/tmp/
+*.tmp
+_body_temp.docx
+
+# Virtualenv
+venv/
+.venv/

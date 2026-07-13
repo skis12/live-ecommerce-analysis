@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh"><head><meta charset="UTF-8"><meta name="viewport" content="width=1500"><title>直播数据平台</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+<style>
+:root{--bg:#090d14;--card:#111827;--border:#1e2d45;--t1:#e5eaf0;--t2:#8899b4;--blue:#4d94ff;--green:#34d399;--orange:#f59e0b;--purple:#a78bfa;--red:#f87171;--cyan:#22d3ee}
+*{margin:0;padding:0;box-sizing:border-box}body{font:13px/1.5 'PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--t1)}
+.top{height:50px;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:14px;position:sticky;top:0;z-index:50}
+.top h1{font-size:15px;font-weight:600;background:linear-gradient(135deg,var(--t1),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.spacer{flex:1}
+.tab-btn{padding:7px 18px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--t2);cursor:pointer;font-size:11px;font-weight:500}.tab-btn.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.top select{padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--t1);font-size:12px}
+.top .tbtn{padding:7px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--t1);font-size:12px;cursor:pointer}.top .tbtn:hover{background:var(--blue)}.top .tbtn.accent{background:var(--green);border-color:var(--green);color:#fff}
+.main{padding:16px 20px;max-width:1700px;margin:0 auto}
+.login{max-width:380px;margin:80px auto;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:32px;text-align:center}
+.login h2{font-size:20px;font-weight:600;margin-bottom:8px}.login .sub{font-size:12px;color:var(--t2);margin-bottom:20px}
+.login input{width:100%;padding:12px;margin:6px 0;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:14px;outline:none}.login input:focus{border-color:var(--blue)}
+.login button{width:100%;padding:12px;margin-top:12px;background:linear-gradient(135deg,var(--blue),var(--purple));border:none;border-radius:8px;color:#fff;font-size:14px;font-weight:600;cursor:pointer}
+.kpi5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;border-left:3px solid transparent}
+.kpi:nth-child(1){border-left-color:var(--blue)}.kpi:nth-child(2){border-left-color:var(--green)}.kpi:nth-child(3){border-left-color:var(--orange)}.kpi:nth-child(4){border-left-color:var(--purple)}.kpi:nth-child(5){border-left-color:var(--cyan)}
+.kpi .l{font-size:10px;color:var(--t2);text-transform:uppercase;margin-bottom:6px}.kpi .v{font-size:26px;font-weight:700}.kpi .s{font-size:10px;color:var(--t3);margin-top:4px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px}
+.panel h3{font-size:11px;color:var(--t2);font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.chart{width:100%}.h260{height:260px}.h280{height:280px}.h300{height:300px}
+.scroll-table{max-height:280px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:11px}td,th{padding:6px 8px;border-bottom:1px solid var(--border)}th{color:var(--t2);font-weight:500;font-size:10px}
+.tr-red{color:var(--red);font-weight:600}.tr-yellow{color:var(--orange)}.tr-up{color:var(--green)}
+.err-msg{text-align:center;padding-top:100px;color:var(--t2);font-size:12px}
+</style></head><body>
+<div class="top"><h1>📊 直播数据平台</h1><span style="color:var(--t2);font-size:11px;margin-left:8px">徐烨 | 2026.07</span><span style="color:var(--t3);font-size:10px;margin-left:4px">Created 2026-07-03</span><div class="spacer"></div>
+  <div id="loggedIn" style="display:none;align-items:center;gap:12px">
+    <select id="roomSel" onchange="refresh()"><option value="">全部直播间</option></select>
+    <button class="tab-btn on" id="tabUser" onclick="setTab('user')">用户分析</button>
+    <button class="tab-btn" id="tabProduct" onclick="setTab('product')">商品分析</button>
+    <button class="tab-btn" id="tabPredict" onclick="setTab('predict')">预测洞察</button>
+    <button class="tbtn accent" onclick="exportCSV()">导出</button>
+    <button class="tbtn" onclick="doLogout()">退出</button>
+  </div>
+</div>
+<div class="main">
+  <div class="login" id="loginBox"><h2>登录</h2><div class="sub">直播数据企业分析平台</div>
+    <input id="lu" placeholder="用户名" value="admin"><br><input id="lp" type="password" placeholder="密码" value="admin123"><br>
+    <button onclick="doLogin()">登 录</button><div class="sub" style="margin-top:12px">admin / admin123</div>
+  </div>
+  <div id="dash"></div>
+</div>
+<script>
+var TOKEN='',RN='',TAB='user',C={};
+function api(p){var u='/api/'+p;u+=u.indexOf('?')>=0?'&':'?';u+='room_name='+encodeURIComponent(RN);return fetch(u,{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){return r.json()})}
+function rawApi(url){return fetch(url,{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){return r.json()})}
+function ch(id){var el=document.getElementById(id);if(!el)return null;if(!C[id])C[id]=echarts.init(el);return C[id]}
+function clearCh(){for(var k in C){try{C[k].dispose()}catch(e){}}C={}}
+
+function doLogin(){
+  fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('lu').value,password:document.getElementById('lp').value})})
+  .then(function(r){return r.json()}).then(function(d){
+    if(!d.token)return alert('Login failed');
+    TOKEN=d.token;document.getElementById('loginBox').style.display='none';
+    document.getElementById('loggedIn').style.display='flex';document.getElementById('dash').style.display='block';
+    rawApi('/api/rooms').then(function(rs){
+      var s=document.getElementById('roomSel');s.innerHTML='<option value="">全部直播间</option>';
+      (rs||[]).forEach(function(x){s.innerHTML+='<option value="'+x.name+'">'+x.name+'</option>'});
+      refresh();setInterval(refresh,12000);
+    });
+  });
+}
+function doLogout(){TOKEN='';location.reload()}
+function setTab(t){TAB=t;clearCh();document.querySelectorAll('.tab-btn').forEach(function(b){b.className='tab-btn'});document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1)).className='tab-btn on';refresh()}
+function refresh(){RN=document.getElementById('roomSel').value;if(!RN){clearCh();loadCompare();return}if(TAB==='user')loadUser();else if(TAB==='product')loadProduct();else loadPredict()}
+
+// ========== USER TAB — 独立分步加载（修复版）==========
+var _uLoad=0,_segData=null,_funData=null,_lastRN='';
+
+// skeleton HTML（避免重复写字符串）
+var _SKEL =
+  '<div class="kpi5">'+
+    '<div class="kpi"><div class="l">情感均分</div><div class="v" style="color:var(--t2)">--</div><div class="s">加载中…</div></div>'+
+    '<div class="kpi"><div class="l">正面率</div><div class="v" style="color:var(--t2)">--</div><div class="s">加载中…</div></div>'+
+    '<div class="kpi"><div class="l">核心粉</div><div class="v" style="color:var(--t2)">--</div><div class="s">加载中…</div></div>'+
+    '<div class="kpi"><div class="l">高活跃率</div><div class="v" style="color:var(--t2)">--</div><div class="s">加载中…</div></div>'+
+    '<div class="kpi"><div class="l">总用户</div><div class="v" style="color:var(--t2)">--</div><div class="s">加载中…</div></div>'+
+  '</div>'+
+  '<div class="g3">'+
+    '<div class="panel"><h3>情感分布</h3><div class="chart h260" id="e1"><div class="err-msg">加载中…</div></div></div>'+
+    '<div class="panel"><h3>弹幕词云</h3><div class="chart h260" id="e2"><div class="err-msg">加载中…</div></div></div>'+
+    '<div class="panel"><h3>情感四象限</h3><div class="chart h260" id="e3"><div class="err-msg">加载中…</div></div></div>'+
+  '</div>'+
+  '<div class="g2">'+
+    '<div class="panel"><h3>弹幕活跃趋势</h3><div class="chart h260" id="e4"><div class="err-msg">加载中…</div></div></div>'+
+    '<div class="panel"><h3>用户分层</h3><div class="chart h260" id="e5"><div class="err-msg">加载中…</div></div></div>'+
+  '</div>';
+
+function loadUser(){
+  var lid=++_uLoad;_segData=null;_funData=null;
+  // 判断是否需要重建 DOM：首次加载、房间切换、或 DOM 不在
+  var domExists = !!document.getElementById('e1');
+  var roomChanged = (RN !== _lastRN);
+  _lastRN = RN;
+  if (!domExists || roomChanged) {
+    clearCh(); // 先销毁所有旧 echarts 实例，避免缓存指向销毁的 DOM
+    document.getElementById('dash').innerHTML = _SKEL;
+  } else {
+    // 同房间定时刷新：不清 DOM，KPI 显示更新中，图表保留旧数据
+    for (var j=1;j<=5;j++) _kpi(j, '', '--', '更新中…', 'var(--t2)');
+  }
+  // 独立拉取，互不阻塞
+  loadSentiment(lid);
+  loadWordcloud(lid);
+  loadQuadrant(lid);
+  loadTrend(lid);
+  loadSeg(lid);
+  loadFunnel(lid);
+}
+
+// --- 工具函数 ---
+function _kpi(i,l,v,s,c){var k=document.querySelectorAll('#dash .kpi5 .kpi')[i-1];if(k)k.innerHTML='<div class="l">'+l+'</div><div class="v" style="color:'+c+'">'+v+'</div><div class="s">'+s+'</div>'}
+function _kpiErr(i){_kpi(i,'错误','--','加载失败','var(--red)')}
+function _chartErr(id,m){
+  if (C[id]) { try { C[id].dispose(); } catch(ex) {} delete C[id]; }
+  var e=document.getElementById(id); if(e) e.innerHTML='<div class="err-msg">'+(m||'加载失败')+'</div>';
+}
+function _chartOK(id){
+  if (C[id]) return; // 图表已初始化（原地刷新），不动 DOM，避免销毁 canvas
+  var e=document.getElementById(id); if(e) e.innerHTML='';
+}
+
+// --- 情感分析 → KPI 1,2 + e1 ---
+function loadSentiment(lid){
+  api('nlp/sentiment?limit=300').then(function(s){
+    if(lid!==_uLoad)return;
+    if(!s||s.error){_kpiErr(1);_kpiErr(2);_chartErr('e1','无情感数据');return}
+    _kpi(1,'情感均分',(s.avg_score||0).toFixed(2),'SnowNLP分析','var(--cyan)');
+    _kpi(2,'正面率',(s.positive_rate||0)+'%',(s.neutral_rate||0)+'% 中性','var(--green)');
+    _chartOK('e1');
+    setTimeout(function(){
+      if(lid!==_uLoad)return;
+      var c=ch('e1');if(!c)return;var d=s.score_distribution||{};
+      c.setOption({series:[{type:'pie',radius:['40%','70%'],label:{formatter:'{b}\n{d}%',fontSize:10,color:'#8899b4'},itemStyle:{borderColor:'#111827',borderWidth:2},data:[{name:'非常正面',value:d['0.8-1.0(非常正面)']||0},{name:'较为正面',value:d['0.6-0.8(较为正面)']||0},{name:'中性',value:d['0.4-0.6(中性)']||0},{name:'较为负面',value:d['0.2-0.4(较为负面)']||0},{name:'极度负面',value:d['0.0-0.2(极度负面)']||0}],color:['#34d399','#4d94ff','#506380','#f59e0b','#f87171']}]});
+    },50);
+  }).catch(function(e){console.error('sentiment:',e);if(lid!==_uLoad)return;_kpiErr(1);_kpiErr(2);_chartErr('e1')});
+}
+
+// --- 词云 → e2 ---
+function loadWordcloud(lid){
+  api('nlp/wordcloud').then(function(wc){
+    if(lid!==_uLoad)return;
+    if(!wc||!wc.length){_chartErr('e2','暂无词云数据');return}
+    _chartOK('e2');
+    setTimeout(function(){
+      if(lid!==_uLoad)return;
+      var c=ch('e2');if(!c)return;
+      c.setOption({series:[{type:'wordCloud',shape:'circle',sizeRange:[14,40],gridSize:6,drawOutOfBound:false,textStyle:{fontFamily:'PingFang SC,Microsoft YaHei',fontWeight:'bold',color:function(){return['#4d94ff','#34d399','#f59e0b','#a78bfa','#f87171','#22d3ee'][Math.floor(Math.random()*6)]}},data:wc.slice(0,55)}]});
+    },50);
+  }).catch(function(e){console.error('wordcloud:',e);if(lid!==_uLoad)return;_chartErr('e2')});
+}
+
+// --- 四象限 → e3 ---
+function loadQuadrant(lid){
+  api('nlp/quadrant').then(function(q){
+    if(lid!==_uLoad)return;
+    if(!q||!q.quadrant){_chartErr('e3','暂无四象限数据');return}
+    var qq=q.quadrant;
+    _chartOK('e3');
+    setTimeout(function(){
+      if(lid!==_uLoad)return;
+      var c=ch('e3');if(!c)return;
+      c.setOption({grid:{top:30,right:30,bottom:40,left:50},xAxis:{name:'活跃度',nameTextStyle:{fontSize:10,color:'#8899b4'},axisLine:{lineStyle:{color:'#1e2d45'}},axisLabel:{fontSize:9,color:'#8899b4'}},yAxis:{name:'情感分',nameTextStyle:{fontSize:10,color:'#8899b4'},axisLine:{lineStyle:{color:'#1e2d45'}},axisLabel:{fontSize:9,color:'#8899b4'}},series:[{type:'scatter',data:[{value:[qq['忠实粉丝']||0,80],name:'忠实粉丝'},{value:[qq['情绪用户']||0,20],name:'情绪用户'},{value:[qq['路人好感']||0,70],name:'路人好感'},{value:[qq['流失风险']||0,30],name:'流失风险'}],symbolSize:function(v){return Math.sqrt(Math.max(10,v[0]))*3+15},label:{show:true,fontSize:11,position:'top',color:'#8899b4'},itemStyle:{color:function(p){return['#34d399','#f87171','#4d94ff','#f59e0b'][p.dataIndex]}}}]});
+    },50);
+  }).catch(function(e){console.error('quadrant:',e);if(lid!==_uLoad)return;_chartErr('e3')});
+}
+
+// --- 弹幕趋势 → e4 ---
+function loadTrend(lid){
+  api('danmaku/trend?mins=120').then(function(dt){
+    if(lid!==_uLoad)return;
+    if(!dt||!dt.length){_chartErr('e4','暂无趋势数据');return}
+    _chartOK('e4');
+    setTimeout(function(){
+      if(lid!==_uLoad)return;
+      var c=ch('e4');if(!c)return;
+      c.setOption({grid:{top:10,right:10,bottom:25,left:45},xAxis:{data:dt.map(function(x){return x.t}),axisLabel:{fontSize:8,rotate:45,color:'#8899b4'}},yAxis:{splitLine:{lineStyle:{color:'#1a2538'}},axisLabel:{fontSize:9,color:'#8899b4'}},series:[{data:dt.map(function(x){return x.c}),type:'line',smooth:true,showSymbol:false,lineStyle:{width:2.5,color:'#a78bfa'},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(167,139,250,.3)'},{offset:1,color:'rgba(167,139,250,0)'}]}}}]});
+    },50);
+  }).catch(function(e){console.error('trend:',e);if(lid!==_uLoad)return;_chartErr('e4')});
+}
+
+// --- 用户分层 → KPI 3 + e5 ---
+function loadSeg(lid){
+  api('analytics/segmentation').then(function(seg){
+    if(lid!==_uLoad)return;
+    if(!seg||!seg.counts){_kpiErr(3);_chartErr('e5','无分层数据');return}
+    _segData=seg;
+    var core=(seg.counts||{})['超级粉(100+)']||0;
+    _kpi(3,'核心粉',core,'弹幕100+条','var(--purple)');
+    renderE5(lid);
+  }).catch(function(e){console.error('seg:',e);if(lid!==_uLoad)return;_kpiErr(3);_chartErr('e5')});
+}
+
+// --- 漏斗 → KPI 4,5 ---
+function loadFunnel(lid){
+  api('analytics/funnel').then(function(f){
+    if(lid!==_uLoad)return;
+    if(!f||f.error){_kpiErr(4);_kpiErr(5);return}
+    _funData=f;
+    _kpi(4,'高活跃率',(f.high_rate||0)+'%','弹幕10+条','var(--blue)');
+    _kpi(5,'总用户',f.total_users||0,'独立用户','var(--orange)');
+  }).catch(function(e){console.error('funnel:',e);if(lid!==_uLoad)return;_kpiErr(4);_kpiErr(5)});
+}
+
+function renderE5(lid){
+  if(!_segData||!_segData.counts)return;
+  _chartOK('e5');
+  setTimeout(function(){
+    if(lid!==_uLoad)return;
+    var c=ch('e5');if(!c)return;
+    var tiers=['路人(1-2)','活跃观众(3-9)','忠实粉丝(10-49)','铁杆粉(50-99)','超级粉(100+)'];
+    var sd=tiers.map(function(t){return{name:t,value:(_segData.counts||{})[t]||0}});
+    c.setOption({series:[{type:'pie',radius:['38%','65%'],label:{formatter:'{b}\n{d}%',fontSize:10,color:'#8899b4'},data:sd,color:['#506380','#4d94ff','#a78bfa','#f59e0b','#f87171']}]});
+  },50);
+}
+
+// ========== PRODUCT TAB ==========
+function loadProduct(){
+  Promise.all([api('orders/gmv'),api('products/top?limit=8'),api('products/inventory'),api('predict/hot')]).then(function(r){
+    var gmv=r[0],top=r[1],inv=r[2],hot=r[3]||{},totalGMV=gmv.reduce(function(s,x){return s+(x.gmv||0)},0),latest=gmv.length?gmv[gmv.length-1]:{gmv:0,orders:0,dt:''},rising=hot.rising_products||[];
+    var h='<div class="kpi5">';
+    h+='<div class="kpi"><div class="l">累计GMV</div><div class="v" style="color:var(--orange)">'+(totalGMV/10000).toFixed(0)+'万</div><div class="s">近14天</div></div>';
+    h+='<div class="kpi"><div class="l">最新日GMV</div><div class="v" style="color:var(--green)">'+(latest.gmv/10000).toFixed(1)+'万</div><div class="s">'+latest.dt+'</div></div>';
+    h+='<div class="kpi"><div class="l">预警商品</div><div class="v" style="color:var(--red)">'+(inv||[]).filter(function(x){return x.alert_level==='RED'}).length+'</div><div class="s">需补货</div></div>';
+    h+='<div class="kpi"><div class="l">热销SKU</div><div class="v" style="color:var(--blue)">'+top.length+'</div><div class="s">商品数</div></div>';
+    h+='<div class="kpi"><div class="l">上升最快</div><div class="v" style="color:var(--cyan)">'+(rising.length>0?rising[0].growth_pct+'%':'--')+'</div><div class="s">'+((rising[0]||{}).product_name||'').substr(0,12)+'</div></div>';
+    h+='</div>';
+    h+='<div class="g2"><div class="panel"><h3>每日GMV & 订单</h3><div class="chart h300" id="e6"></div></div>';
+    h+='<div class="panel"><h3>热销商品 Top 8</h3><div class="chart h300" id="e7"></div></div></div>';
+    h+='<div class="g2"><div class="panel"><h3>库存预警</h3><div class="scroll-table"><table><tr><th>商品</th><th>品类</th><th>库存</th><th>已售</th><th>售罄率</th><th>预警</th></tr>';
+    (inv||[]).slice(0,20).forEach(function(x){h+='<tr><td>'+x.product_name.substr(0,28)+'</td><td>'+x.category+'</td><td>'+x.stock+'</td><td>'+x.sold+'</td><td>'+x.sell_through_rate+'%</td><td class="'+(x.alert_level==='RED'?'tr-red':'tr-yellow')+'">'+x.alert_level+'</td></tr>'});
+    h+='</table></div></div><div class="panel"><h3>潜力上升商品</h3><div class="chart h280" id="e8"></div></div></div>';
+    document.getElementById('dash').innerHTML=h;
+    setTimeout(function(){renderProductCharts(gmv,top,rising);},300);
+  }).catch(function(e){console.error('product:',e);document.getElementById('dash').innerHTML='<div class="err-msg" style="padding:80px">商品数据加载失败，请检查网络或稍后重试</div>'});
+}
+function renderProductCharts(gmv,top,rising){
+  var c6=ch('e6');if(c6)c6.setOption({tooltip:{trigger:'axis'},grid:{top:10,right:60,bottom:25,left:65},xAxis:{data:gmv.map(function(x){return x.dt}),axisLabel:{fontSize:8,rotate:30,color:'#8899b4'}},yAxis:[{splitLine:{lineStyle:{color:'#1a2538'}},axisLabel:{fontSize:9,color:'#8899b4'}},{axisLabel:{fontSize:9,color:'#8899b4'}}],series:[{name:'GMV',data:gmv.map(function(x){return x.gmv}),type:'line',smooth:true,showSymbol:false,lineStyle:{width:2.5,color:'#f59e0b'},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(245,158,11,.15)'},{offset:1,color:'rgba(245,158,11,0)'}]}}},{name:'订单',data:gmv.map(function(x){return x.orders}),type:'bar',yAxisIndex:1,itemStyle:{color:'rgba(77,148,255,.5)',borderRadius:[3,3,0,0]}}],legend:{data:['GMV','订单'],textStyle:{color:'#8899b4',fontSize:10},top:0}});
+  var tp=top.slice(0,8).reverse();var c7=ch('e7');if(c7)c7.setOption({grid:{top:5,right:30,bottom:5,left:5},xAxis:{type:'value',show:false},yAxis:{type:'category',data:tp.map(function(x){return x.product_name.substr(0,16)}),axisLabel:{fontSize:9,color:'#8899b4'},axisLine:{show:false},axisTick:{show:false}},series:[{data:tp.map(function(x){return x.sold}),type:'bar',itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:'#34d399'},{offset:1,color:'#f59e0b'}]},borderRadius:[0,4,4,0]},label:{show:true,position:'right',fontSize:9,color:'#8899b4',formatter:'{c}件'}}]});
+  var rs=rising.slice(0,8);if(rs.length){var rs2=rs.reverse();var c8=ch('e8');if(c8)c8.setOption({grid:{top:5,right:35,bottom:5,left:5},xAxis:{type:'value',show:false},yAxis:{type:'category',data:rs2.map(function(x){return x.product_name.substr(0,16)}),axisLabel:{fontSize:9,color:'#8899b4'},axisLine:{show:false},axisTick:{show:false}},series:[{data:rs2.map(function(x){return x.growth_pct}),type:'bar',itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:'#a78bfa'},{offset:1,color:'#34d399'}]},borderRadius:[0,4,4,0]},label:{show:true,position:'right',fontSize:9,color:'#8899b4',formatter:'{c}%'}}]})}
+}
+
+// ========== PREDICT TAB ==========
+function loadPredict(){
+  Promise.all([api('predict/sales?days=7'),api('recommend/rules'),api('predict/hot')]).then(function(r){
+    var pred=r[0],rules=r[1],hot=r[2]||{},p0=(pred.predictions||[])[0]||{predicted_qty:0,predicted_gmv:0},rising=hot.rising_products||[],hist=pred.history||[],pds=pred.predictions||[];
+    var h='<div class="kpi5">';
+    h+='<div class="kpi"><div class="l">明日预测销量</div><div class="v" style="color:var(--blue)">'+p0.predicted_qty+'件</div><div class="s">线性回归</div></div>';
+    h+='<div class="kpi"><div class="l">明日预测GMV</div><div class="v" style="color:var(--green)">'+((p0.predicted_gmv||0)/10000).toFixed(1)+'万</div><div class="s">趋势:'+(pred.trend||'平稳')+'</div></div>';
+    h+='<div class="kpi"><div class="l">关联规则</div><div class="v" style="color:var(--purple)">'+((rules.top_rules||[]).length)+'</div><div class="s">买了A又买B</div></div>';
+    h+='<div class="kpi"><div class="l">7日均量</div><div class="v" style="color:var(--cyan)">'+(pred.ma7_latest||0)+'</div><div class="s">移动平均</div></div>';
+    h+='<div class="kpi"><div class="l">斜率</div><div class="v" style="color:'+(pred.slope>0?'var(--green)':'var(--red)')+'">'+(pred.slope||0).toFixed(2)+'</div><div class="s">日均变化</div></div>';
+    h+='</div>';
+    h+='<div class="g2"><div class="panel"><h3>销量趋势 & 7天预测</h3><div class="chart h300" id="e9"></div></div>';
+    h+='<div class="panel"><h3>潜力上升商品</h3><div class="chart h300" id="e10"></div></div></div>';
+    h+='<div class="g2"><div class="panel"><h3>关联规则 (买了A也买B)</h3><div class="scroll-table"><table><tr><th>前项</th><th>→</th><th>后项</th><th>支持度</th><th>置信度</th><th>提升度</th></tr>';
+    (rules.top_rules||[]).slice(0,15).forEach(function(x){h+='<tr><td>'+x.antecedent.substr(0,18)+'</td><td>→</td><td>'+x.consequent.substr(0,18)+'</td><td>'+x.support+'</td><td>'+x.confidence+'</td><td class="'+(x.lift>2?'tr-up':'')+'">'+x.lift+'</td></tr>'});
+    h+='</table></div></div></div>';
+    document.getElementById('dash').innerHTML=h;
+    setTimeout(function(){renderPredictCharts(hist,pds,rising);},300);
+  }).catch(function(e){console.error('predict:',e);document.getElementById('dash').innerHTML='<div class="err-msg" style="padding:80px">预测数据加载失败，请检查网络或稍后重试</div>'});
+}
+function renderPredictCharts(hist,pds,rising){
+  var times=hist.map(function(x){return x.date.substr(5)}).concat(pds.map(function(x){return x.date.substr(5)}));
+  var qtys=hist.map(function(x){return x.qty}),ma=hist.map(function(x){return x.ma7}),fcast=[];
+  for(var i=0;i<hist.length;i++)fcast.push(null);
+  for(var j=0;j<pds.length;j++)fcast.push(pds[j].predicted_qty);
+  if(hist.length&&pds.length){qtys.push(null);ma.push(null);fcast[hist.length-1]=hist[hist.length-1].qty}
+  for(var k=0;k<pds.length;k++){qtys.push(null);ma.push(null)}
+  var c9=ch('e9');if(c9)c9.setOption({tooltip:{trigger:'axis'},grid:{top:15,right:20,bottom:25,left:55},xAxis:{data:times,axisLabel:{fontSize:8,rotate:30,color:'#8899b4'}},yAxis:{splitLine:{lineStyle:{color:'#1a2538'}},axisLabel:{fontSize:9,color:'#8899b4'}},series:[{name:'实际销量',data:qtys,type:'bar',itemStyle:{color:'rgba(77,148,255,.5)',borderRadius:[3,3,0,0]}},{name:'预测销量',data:fcast,type:'line',smooth:true,showSymbol:true,lineStyle:{width:2.5,color:'#f87171',type:'dashed'},symbolSize:8},{name:'7日均线',data:ma,type:'line',smooth:true,showSymbol:false,lineStyle:{width:2,color:'#f59e0b'}}],legend:{data:['实际销量','预测销量','7日均线'],textStyle:{color:'#8899b4',fontSize:10},top:0}});
+  var rs=rising.slice(0,8);if(rs.length){var rs2=rs.reverse();var c10=ch('e10');if(c10)c10.setOption({grid:{top:5,right:35,bottom:5,left:5},xAxis:{type:'value',show:false},yAxis:{type:'category',data:rs2.map(function(x){return x.product_name.substr(0,16)}),axisLabel:{fontSize:9,color:'#8899b4'},axisLine:{show:false},axisTick:{show:false}},series:[{data:rs2.map(function(x){return x.growth_pct}),type:'bar',itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:'#a78bfa'},{offset:1,color:'#34d399'}]},borderRadius:[0,4,4,0]},label:{show:true,position:'right',fontSize:9,color:'#8899b4',formatter:'{c}%'}}]})}
+}
+
+// ========== COMPARE ==========
+function loadCompare(){
+  rawApi('/api/stats/compare').then(function(cmp){
+    var rooms=Object.keys(cmp||{});var h='';
+    h+='<div class="g2">';
+    rooms.forEach(function(name){var c=cmp[name],live=parseInt(c.online)>0;
+      h+='<div class="panel" style="border-left:3px solid '+(live?'var(--green)':'var(--t3)')+'"><h3>'+(live?'[直播] ':'[离线] ')+name+'</h3>';
+      h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">';
+      h+='<div>在线: <b style="color:var(--blue)">'+c.online+'</b></div><div>点赞: <b style="color:var(--orange)">'+(c.likes?(c.likes/10000).toFixed(1)+'万':'0')+'</b></div>';
+      h+='<div>弹幕: <b style="color:var(--green)">'+c.danmaku+'</b></div><div>更新: <b>'+c.updated+'</b></div></div>';
+      h+='<div style="margin-top:6px;font-size:11px;color:var(--t2)">'+c.title+'</div></div>';
+    });
+    h+='</div>';
+    h+='<div class="g2"><div class="panel"><h3>情感分布对比</h3><div class="chart h260" id="eCmp1"></div></div>';
+    h+='<div class="panel"><h3>活跃度对比</h3><div class="chart h260" id="eCmp2"></div></div></div>';
+    document.getElementById('dash').innerHTML=h;
+    var labels=['极度负面','较为负面','中性','较为正面','非常正面'];
+    Promise.all(rooms.map(function(n){return rawApi('/api/nlp/sentiment?room_name='+encodeURIComponent(n)+'&limit=300')}))
+    .then(function(sents){
+      Promise.all(rooms.map(function(n){return rawApi('/api/analytics/funnel?room_name='+encodeURIComponent(n))}))
+      .then(function(funnels){
+        setTimeout(function(){
+          var c1=ch('eCmp1');if(c1)c1.setOption({tooltip:{trigger:'axis'},legend:{data:rooms,textStyle:{color:'#8899b4',fontSize:10},top:0},grid:{top:30,right:20,bottom:20,left:40},xAxis:{data:labels,axisLabel:{fontSize:9,color:'#8899b4'}},yAxis:{splitLine:{lineStyle:{color:'#1a2538'}},axisLabel:{fontSize:9,color:'#8899b4'}},series:rooms.map(function(n,i){var D=(sents[i]||{}).score_distribution||{};return{name:n,type:'bar',barGap:'20%',itemStyle:{borderRadius:[3,3,0,0]},data:[D['0.0-0.2(极度负面)']||0,D['0.2-0.4(较为负面)']||0,D['0.4-0.6(中性)']||0,D['0.6-0.8(较为正面)']||0,D['0.8-1.0(非常正面)']||0]}})});
+          var c2=ch('eCmp2');if(c2)c2.setOption({tooltip:{trigger:'axis'},legend:{data:rooms,textStyle:{color:'#8899b4',fontSize:10},top:0},grid:{top:30,right:20,bottom:20,left:40},xAxis:{data:['高活跃(10+)','中活跃(3-9)','低活跃(1-2)'],axisLabel:{fontSize:9,color:'#8899b4'}},yAxis:{splitLine:{lineStyle:{color:'#1a2538'}},axisLabel:{fontSize:9,color:'#8899b4'}},series:rooms.map(function(n,i){var F=funnels[i]||{};return{name:n,type:'bar',barGap:'20%',itemStyle:{borderRadius:[3,3,0,0]},data:[F.high_active||0,F.mid_active||0,F.low_active||0]}})});
+        },300);
+      });
+    });
+  }).catch(function(e){console.error('compare:',e);document.getElementById('dash').innerHTML='<div class="err-msg" style="padding:80px">数据加载失败，请刷新重试</div>'});
+}
+
+function exportCSV(){window.open('/api/export?room_name='+encodeURIComponent(RN)+'&token='+TOKEN)}
+</script></body></html>

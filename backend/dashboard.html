@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh"><head><meta charset="UTF-8"><meta name="viewport" content="width=1400"><title>直播数据大屏</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+<style>
+:root{--bg:#090d14;--card:#111827;--border:#1e2d45;--t1:#e5eaf0;--t2:#8899b4;--t3:#506380;--blue:#4d94ff;--green:#34d399;--orange:#f59e0b;--purple:#a78bfa;--red:#f87171;--cyan:#22d3ee;--pink:#f472b6}
+*{margin:0;padding:0;box-sizing:border-box}body{font:13px/1.5 'PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--t1)}
+.header{display:flex;justify-content:space-between;align-items:center;padding:14px 28px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50}
+.header h1{font-size:18px;font-weight:600;background:linear-gradient(135deg,var(--t1),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header select{padding:7px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--t1);font-size:12px}
+.main{padding:16px 24px;max-width:1600px;margin:0 auto}
+.k8{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-bottom:12px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;border-left:3px solid transparent}
+.kpi:nth-child(1){border-left-color:var(--blue)}.kpi:nth-child(2){border-left-color:var(--orange)}.kpi:nth-child(3){border-left-color:var(--green)}.kpi:nth-child(4){border-left-color:var(--purple)}.kpi:nth-child(5){border-left-color:var(--cyan)}.kpi:nth-child(6){border-left-color:var(--pink)}.kpi:nth-child(7){border-left-color:var(--red)}.kpi:nth-child(8){border-left-color:#fbbf24}
+.kpi .l{font-size:9px;color:var(--t2);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px}.kpi .v{font-size:22px;font-weight:700}.kpi .s{font-size:9px;color:var(--t3);margin-top:2px}
+.grid2{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px}
+.panel h3{font-size:11px;color:var(--t2);font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.chart{width:100%}.h300{height:300px}.h240{height:240px}.h200{height:200px}
+.feed{max-height:300px;overflow-y:auto;font-size:12px}.feed .r{padding:4px 6px;border-bottom:1px solid rgba(255,255,255,.02);display:flex;gap:8px}.feed .u{color:var(--blue);white-space:nowrap}.feed .t{flex:1}.feed .time{color:var(--t3);font-size:10px}
+.mini-table{font-size:10px;width:100%}.mini-table td{padding:2px 4px;border-bottom:1px solid rgba(255,255,255,.03)}
+</style></head><body>
+<div class="header">
+  <h1>📡 直播数据大屏</h1><span style="color:var(--t2);font-size:11px;margin-left:8px">徐烨 | Created 2026-07-03</span>
+  <div style="display:flex;align-items:center;gap:16px">
+    <select id="roomSel" onchange="reload()"><option value="994154756317">影视飓风</option><option value="646454278948">与晖同行</option></select>
+    <span style="color:var(--t3);font-size:12px" id="clock"></span>
+  </div>
+</div>
+<div class="main">
+  <div class="k8" id="kpiRow"></div>
+  <div class="grid2">
+    <div class="panel"><h3>📈 在线人数 & 点赞趋势</h3><div class="chart h300" id="v1"></div></div>
+    <div class="panel"><h3>ℹ️ 直播信息</h3><div id="roomInfo" style="font-size:13px;line-height:2.2"></div></div>
+  </div>
+  <div class="grid3">
+    <div class="panel"><h3>😊 情感分布</h3><div class="chart h240" id="v2"></div></div>
+    <div class="panel"><h3>☁️ 弹幕词云</h3><div class="chart h240" id="v3"></div></div>
+    <div class="panel"><h3>💬 弹幕活跃趋势</h3><div class="chart h240" id="v4"></div></div>
+  </div>
+  <div class="grid3">
+    <div class="panel"><h3>🛒 GMV & 订单趋势</h3><div class="chart h240" id="v5"></div></div>
+    <div class="panel"><h3>🏆 热销商品 Top 5</h3><div id="v6" style="max-height:240px;overflow:auto"></div></div>
+    <div class="panel"><h3>📝 实时弹幕流</h3><div class="feed" id="feed"></div></div>
+  </div>
+  <div style="text-align:center;padding:8px;color:var(--t3);font-size:10px">🔄 自动刷新 · 最后更新: <span id="lastUpdate">--</span></div>
+</div>
+<script>
+var RID='994154756317',RN=function(){return RID==='646454278948'?'与晖同行':'影视飓风'},C={},firstLoad=true;
+function get(u){var ctrl=new AbortController();setTimeout(function(){ctrl.abort()},10000);return fetch('/api/'+u,{signal:ctrl.signal}).then(function(r){return r.json()}).catch(function(){return[]})}
+function dm(u){var s=u.indexOf('?')>=0?'&':'?';var ctrl=new AbortController();setTimeout(function(){ctrl.abort()},10000);return fetch('/api/'+u+s+'room_name='+encodeURIComponent(RN()),{signal:ctrl.signal}).then(function(r){return r.json()}).catch(function(){return[]})}
+function ch(id){var el=document.getElementById(id);if(!el)return null;var c=echarts.getInstanceByDom(el);if(c){c.clear();return c}c=echarts.init(el);C[id]=c;return c}
+function now(){var d=new Date();return d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+
+function reload(){
+  var prevRID=RID; RID=document.getElementById('roomSel').value;
+  var roomChanged=(prevRID!==RID);
+
+  get('stats?room_id='+RID).then(function(s){
+    var isOff=(s.status||'').includes('未')||(s.status||'').includes('off');
+    var ol=s.online||'0', likes=((s.likes||0)/10000).toFixed(1);
+    var liveLabel=isOff?'已结束':'直播中';
+    var liveBadge=isOff?'<span style="background:rgba(248,113,113,.15);color:var(--red);padding:2px 8px;border-radius:10px;font-size:10px">● 已结束</span>':'<span style="background:rgba(52,211,153,.15);color:var(--green);padding:2px 8px;border-radius:10px;font-size:10px">● 直播中</span>';
+    var olDisplay=isOff?(parseInt(ol)>1000?'峰值 '+(parseInt(ol)/10000).toFixed(1)+'w':ol):ol;
+    var olColor=isOff?'var(--t3)':'var(--blue)';
+
+    if(roomChanged||firstLoad){
+      document.getElementById('kpiRow').innerHTML=
+        '<div class="kpi" style="'+(isOff?'opacity:.6':'')+'"><div class="l">实时在线</div><div class="v" style="color:'+olColor+'" id="kvOnline">'+olDisplay+'</div><div class="s" id="kvTime">'+liveLabel+' · '+s.timestamp+'</div></div>'+
+        '<div class="kpi"><div class="l">累计点赞</div><div class="v" style="color:var(--orange)" id="kvLikes">'+likes+'万</div><div class="s">直播总点赞</div></div>'+
+        '<div class="kpi"><div class="l">采集量</div><div class="v" style="color:var(--green)" id="kvTotal">'+(s.total||0)+'</div><div class="s">条记录</div></div>'+
+        '<div class="kpi"><div class="l">弹幕量</div><div class="v" style="color:var(--purple)" id="kvDm">'+(s.danmaku_count||0)+'</div><div class="s">弹幕+礼物</div></div>'+
+        '<div class="kpi"><div class="l">情感分</div><div class="v" style="color:var(--cyan)" id="kvSent">-</div><div class="s">SnowNLP</div></div>'+
+        '<div class="kpi"><div class="l">今日GMV</div><div class="v" style="color:var(--pink)" id="kvGmv">-</div><div class="s">累计交易额</div></div>'+
+        '<div class="kpi"><div class="l">热销品</div><div class="v" style="color:var(--red);font-size:16px" id="kvTop">-</div><div class="s">最受欢迎</div></div>'+
+        '<div class="kpi"><div class="l">直播间</div><div class="v" style="color:#fbbf24;font-size:13px" id="kvTitle">'+(s.title||'').substr(0,10)+'</div><div class="s" id="kvTime2">'+liveBadge+'</div></div>';
+      var infoHtml='📺 <b>'+s.title+'</b><br>⏱ 开始: '+s.start_time+'<br>📊 数据量: '+s.total+' 条<br>💬 弹幕: '+s.danmaku_count+' 条';
+      if(isOff) infoHtml+='<br><span style="color:var(--red)">⚠ 直播已结束</span><br><span style="color:var(--t3);font-size:11px">数据停止更新于 '+s.timestamp+'</span>';
+      document.getElementById('roomInfo').innerHTML=infoHtml;
+    } else {
+      var el;
+      el=document.getElementById('kvOnline'); if(el)el.textContent=olDisplay;
+      el=document.getElementById('kvLikes'); if(el)el.textContent=likes+'万';
+      el=document.getElementById('kvTotal'); if(el)el.textContent=s.total||0;
+      el=document.getElementById('kvDm'); if(el)el.textContent=s.danmaku_count||0;
+      el=document.getElementById('kvTime'); if(el)el.textContent=liveLabel+' · '+s.timestamp;
+      el=document.getElementById('kvTitle'); if(el)el.textContent=(s.title||'').substr(0,10);
+      el=document.getElementById('kvTime2'); if(el)el.innerHTML=liveBadge;
+    }
+    firstLoad=false;
+    var nextInterval=(isOff?30000:8000);
+    clearInterval(window._reloadTimer);
+    window._reloadTimer=setInterval(reload,nextInterval);
+  });
+
+  // Async KPI updates - only if elements still exist (not being rebuilt)
+  dm('nlp/sentiment?limit=100').then(function(s){if(!s.error){var el=document.getElementById('kvSent');if(el)el.textContent=(s.avg_score||0).toFixed(2)}});
+  get('orders/gmv?days=1&room_name='+encodeURIComponent(RN())).then(function(d){if(d&&d.length){var el=document.getElementById('kvGmv');if(el)el.textContent=((d[d.length-1].gmv||0)/10000).toFixed(1)+'万'}});
+  get('products/top?limit=1&room_name='+encodeURIComponent(RN())).then(function(d){if(d&&d.length){var el=document.getElementById('kvTop');if(el)el.textContent=(d[0].product_name||'').substr(0,8)}});
+
+  // Chart 1: Trends (incremental data update)
+  get('trends?room_id='+RID+'&mins=120').then(function(d){
+    var c=ch('v1'),o=d.map(function(x){return x.online}),l=d.map(function(x){return x.like_rate});
+    var mx=Math.max.apply(null,o.concat([100])),ymx=Math.ceil(mx*1.2/1000)*1000;
+    c.setOption({grid:{top:15,right:60,bottom:25,left:65},xAxis:{data:d.map(function(x){return x.time}),axisLabel:{fontSize:9,color:'#8899b4'}},yAxis:[{splitLine:{lineStyle:{color:'#1a2538'}},min:0,max:ymx,axisLabel:{fontSize:9,color:'#8899b4'}},{splitLine:{lineStyle:{color:'#1a2538'}},axisLabel:{fontSize:9,color:'#8899b4'}}],series:[{name:'在线',data:o,type:'line',smooth:true,showSymbol:false,yAxisIndex:0,lineStyle:{width:2.5,color:'#4d94ff'},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(77,148,255,.18)'},{offset:1,color:'rgba(77,148,255,0)'}]}}},{name:'点赞速率',data:l,type:'bar',yAxisIndex:1,itemStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(167,139,250,.7)'},{offset:1,color:'rgba(167,139,250,.15)'}]},borderRadius:[4,4,0,0]}}],legend:{data:['在线','点赞速率'],textStyle:{color:'#8899b4',fontSize:10},top:0}},true);
+  });
+
+  // Chart 2: Sentiment (always update)
+  dm('nlp/sentiment?limit=300').then(function(s){if(s.error)return;var c=ch('v2'),d=s.score_distribution||{};c.setOption({series:[{type:'pie',radius:['40%','70%'],label:{formatter:'{b}\n{d}%',fontSize:10,color:'#8899b4'},itemStyle:{borderColor:'#111827',borderWidth:2},data:[{name:'非常正面',value:d['0.8-1.0(非常正面)']||0},{name:'较为正面',value:d['0.6-0.8(较为正面)']||0},{name:'中性',value:d['0.4-0.6(中性)']||0},{name:'较为负面',value:d['0.2-0.4(较为负面)']||0},{name:'极度负面',value:d['0.0-0.2(极度负面)']||0}],color:['#34d399','#4d94ff','#506380','#f59e0b','#f87171']}]})});
+
+  // Chart 3: Wordcloud (always update)
+  dm('nlp/wordcloud').then(function(w){if(!w.length)return;var c=ch('v3');c.setOption({series:[{type:'wordCloud',shape:'circle',sizeRange:[14,40],gridSize:6,drawOutOfBound:false,textStyle:{fontFamily:'PingFang SC,Microsoft YaHei',fontWeight:'bold',color:function(){return['#4d94ff','#34d399','#f59e0b','#a78bfa','#f87171','#22d3ee'][Math.floor(Math.random()*6)]}},data:w.slice(0,55)}]});});
+
+  // Chart 4: Danmaku trend (incremental)
+  dm('danmaku/trend?mins=120').then(function(d){var c=ch('v4');c.setOption({grid:{top:10,right:10,bottom:25,left:45},xAxis:{data:d.map(function(x){return x.t}),axisLabel:{fontSize:8,rotate:45,color:'#8899b4'}},yAxis:{splitLine:{lineStyle:{color:'#1a2538'}},axisLabel:{fontSize:9,color:'#8899b4'}},series:[{data:d.map(function(x){return x.c}),type:'bar',itemStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'#34d399'},{offset:1,color:'rgba(52,211,153,.15)'}]},borderRadius:[4,4,0,0]}}]},false)});
+
+  // Chart 5: GMV trend (incremental)
+  get('orders/gmv?days=7&room_name='+encodeURIComponent(RN())).then(function(d){
+    var c=ch('v5'),gmv=d.map(function(x){return x.gmv}),ord=d.map(function(x){return x.orders});
+    c.setOption({tooltip:{trigger:'axis'},grid:{top:10,right:60,bottom:25,left:65},xAxis:{data:d.map(function(x){return x.dt}),axisLabel:{fontSize:8,rotate:30,color:'#8899b4'}},yAxis:[{splitLine:{lineStyle:{color:'#1a2538'}},axisLabel:{fontSize:9,color:'#8899b4'}},{axisLabel:{fontSize:9,color:'#8899b4'}}],series:[{name:'GMV',data:gmv,type:'line',smooth:true,showSymbol:false,lineStyle:{width:2.5,color:'#f59e0b'},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(245,158,11,.15)'},{offset:1,color:'rgba(245,158,11,0)'}]}}},{name:'订单',data:ord,type:'bar',yAxisIndex:1,itemStyle:{color:'rgba(77,148,255,.5)',borderRadius:[3,3,0,0]}}],legend:{data:['GMV','订单'],textStyle:{color:'#8899b4',fontSize:10},top:0}},false);
+  });
+
+  // Panel 6: Top products
+  get('products/top?limit=5&room_name='+encodeURIComponent(RN())).then(function(d){
+    var h='<table class="mini-table">';d.forEach(function(x,i){h+='<tr><td style="color:var(--t3)">#'+(i+1)+'</td><td style="color:var(--t1)">'+x.product_name.substr(0,18)+'</td><td style="color:var(--green)">'+x.sold+'件</td></tr>'});
+    document.getElementById('v6').innerHTML=h+'</table>';
+  });
+
+  // Feed
+  dm('danmaku/recent?limit=25').then(function(d){var h='';d.forEach(function(x){h+='<div class="r"><span class="u">'+x.username+'</span><span class="t">'+(x.gift_name?'[礼物] '+x.gift_name:x.text)+'</span><span class="time">'+(x.created_at||'').substr(11,5)+'</span></div>'});document.getElementById('feed').innerHTML=h||(isOff?'直播已结束':'等待弹幕...')});
+  var lu=document.getElementById('lastUpdate');if(lu)lu.textContent=now();
+
+} // end of get('stats?').then(callback)
+
+reload();
+setInterval(function(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},500);
+</script></body></html>
