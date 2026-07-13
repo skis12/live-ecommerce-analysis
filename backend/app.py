@@ -22,10 +22,18 @@ app = FastAPI(title="直播数据分析平台 v5")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 security = HTTPBearer(auto_error=False)
 
-# ===== DB Helper =====
+# ===== DB Helpers =====
 def db_query(sql: str, params=None):
     db = pymysql.connect(**DB_CFG); cur = db.cursor()
     cur.execute(sql, params); rows = cur.fetchall()
+    cols = [d[0] for d in cur.description]
+    cur.close(); db.close()
+    return [dict(zip(cols, r)) for r in rows]
+
+def db_query_raw(sql: str):
+    """直接执行SQL，不使用参数替换（用于含 %H:%i 等MySQL格式串的场景）"""
+    db = pymysql.connect(**DB_CFG); cur = db.cursor()
+    cur.execute(sql); rows = cur.fetchall()
     cols = [d[0] for d in cur.description]
     cur.close(); db.close()
     return [dict(zip(cols, r)) for r in rows]
@@ -123,10 +131,13 @@ def compare():
 
 @app.get("/api/trends")
 def trends(room_id: str = Query('994154756317'), mins: int = Query(120)):
-    """在线&点赞趋势"""
+    """在线&点赞趋势（无近期数据时自动回退到全部历史）"""
     rows = db_query("SELECT online, like_count, created_at FROM live_metrics "
                     "WHERE room_id=%s AND created_at > DATE_SUB(NOW(), INTERVAL %s MINUTE) "
                     "ORDER BY id", (room_id, mins))
+    if not rows:  # 无近期数据，回退到全部历史
+        rows = db_query("SELECT online, like_count, created_at FROM live_metrics "
+                        "WHERE room_id=%s ORDER BY id", (room_id,))
     step = max(1, len(rows) // 80)
     result = []
     prev_likes = 0
@@ -152,10 +163,19 @@ def recent_danmaku(room_name: str = Query('影视飓风'), limit: int = Query(20
 
 @app.get("/api/danmaku/trend")
 def danmaku_trend(room_name: str = Query('影视飓风'), mins: int = Query(60)):
-    """弹幕频率趋势"""
-    return db_query("SELECT DATE_FORMAT(created_at,'%%H:%%i') as t, COUNT(*) as c "
-                    "FROM danmaku WHERE room_name=%s AND created_at > DATE_SUB(NOW(), INTERVAL %s MINUTE) "
-                    "GROUP BY t ORDER BY t", (room_name, mins))
+    """弹幕频率趋势（无近期数据时自动回退到全部历史）"""
+    room = room_name.replace("'", "''")
+    rows = db_query_raw(
+        f"SELECT DATE_FORMAT(created_at, '%H:%i') as t, COUNT(*) as c "
+        f"FROM danmaku WHERE room_name='{room}' AND created_at > DATE_SUB(NOW(), INTERVAL {mins} MINUTE) "
+        "GROUP BY t ORDER BY t"
+    )
+    if not rows:
+        rows = db_query_raw(
+            f"SELECT DATE_FORMAT(created_at, '%H:%i') as t, COUNT(*) as c "
+            f"FROM danmaku WHERE room_name='{room}' GROUP BY t ORDER BY t"
+        )
+    return rows
 
 @app.get("/api/danmaku/words")
 def top_words(room_name: str = Query('影视飓风'), limit: int = Query(30)):
@@ -175,9 +195,11 @@ def top_words(room_name: str = Query('影视飓风'), limit: int = Query(30)):
 @app.get("/api/collect_rate")
 def collect_rate(room_id: str = Query('994154756317')):
     """每分钟采集速率"""
-    return db_query("SELECT DATE_FORMAT(created_at,'%%H:%%i') as t, COUNT(*) as c "
-                    "FROM live_metrics WHERE room_id=%s AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR) "
-                    "GROUP BY t ORDER BY t", (room_id,))
+    return db_query_raw(
+        f"SELECT DATE_FORMAT(created_at, '%H:%i') as t, COUNT(*) as c "
+        f"FROM live_metrics WHERE room_id='{room_id}' AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR) "
+        "GROUP BY t ORDER BY t"
+    )
 
 
 # ===== 分析 APIs（需登录）=====
@@ -362,13 +384,18 @@ def recent_orders(room_name: str = Query(''), limit: int = Query(20)):
     return db_query(f"SELECT * FROM orders {w} ORDER BY order_time DESC LIMIT {limit}", p)
 
 @app.get("/api/orders/gmv")
-def gmv_trend(room_name: str = Query(''), days: int = Query(14)):
-    """GMV 趋势（按天汇总）"""
+def gmv_trend(room_name: str = Query(''), days: int = Query(365)):
+    """GMV 趋势（按天汇总，无近期数据时自动回退到全部历史）"""
     w, p = ("WHERE room_name=%s", [room_name]) if room_name else ("", [])
-    return db_query(f"""SELECT DATE(order_time) as dt, COUNT(*) as orders,
+    rows = db_query(f"""SELECT DATE(order_time) as dt, COUNT(*) as orders,
         ROUND(SUM(total_amount),0) as gmv, SUM(quantity) as items
         FROM orders {w} {'AND' if w else 'WHERE'} order_time > DATE_SUB(NOW(), INTERVAL {days} DAY)
         GROUP BY dt ORDER BY dt""", p)
+    if not rows:
+        rows = db_query(f"""SELECT DATE(order_time) as dt, COUNT(*) as orders,
+            ROUND(SUM(total_amount),0) as gmv, SUM(quantity) as items
+            FROM orders {w} GROUP BY dt ORDER BY dt""", p)
+    return rows
 
 # ===== 推荐 & 预测 APIs =====
 

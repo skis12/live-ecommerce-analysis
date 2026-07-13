@@ -45,7 +45,13 @@ ROOMS = {
 # ============================================================
 # 抖音直播 Cookie（会过期，需定期通过浏览器重新获取）
 # ============================================================
-DOUYIN_COOKIE = os.getenv('DOUYIN_COOKIE', '')
+# DOUYIN_COOKIE 从环境变量读取，或从 crawler/douyin_cookie.txt 读取
+_cookie_file = os.path.join(os.path.dirname(__file__), 'crawler', 'douyin_cookie.txt')
+_default_cookie = ''
+if os.path.exists(_cookie_file):
+    with open(_cookie_file, 'r') as f:
+        _default_cookie = f.read().strip()
+DOUYIN_COOKIE = os.getenv('DOUYIN_COOKIE', _default_cookie)
 
 # ============================================================
 # FastAPI / JWT
