@@ -122,6 +122,26 @@ live-ecommerce-analysis/
 
 ---
 
+## 界面展示
+
+### 实时数据大屏
+
+![简易大屏](docs/screenshots/dashboard_simple.png)
+
+![简易大屏-数据](docs/screenshots/dashboard_simple2.png)
+
+### 企业级分析大屏（带JWT登录）
+
+![企业大屏](docs/screenshots/dashboard_enterprise.png)
+
+![企业大屏-多标签](docs/screenshots/dashboard_enterprise2.png)
+
+### Flink WebUI — 实时计算作业监控
+
+![Flink Dashboard](docs/screenshots/flink_webui.png)
+
+---
+
 ## 核心功能
 
 ### 1. 实时数据采集
