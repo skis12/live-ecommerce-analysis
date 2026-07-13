@@ -1,308 +1,94 @@
 # 直播电商实时数据分析平台
 
-> Live E-commerce Real-Time Data Analytics Platform (Lambda Architecture)
+大三生产实习项目。3台VM搭的Hadoop+Kafka+Flink+Hive集群，从抖音直播间实时采集数据，Flink SQL做窗口聚合，FastAPI做后端，ECharts做大屏。
 
-面向抖音直播平台的端到端实时数据采集、处理、分析、可视化全链路系统。支持双直播间并行采集，覆盖实时流计算、离线数仓、NLP情感分析、用户分群、商品推荐、销量预测等模块。
+## 技术栈
 
-![Tech Stack](https://img.shields.io/badge/Kafka-3.x-231F20?logo=apachekafka)
-![Hive](https://img.shields.io/badge/Hive-3.x-FDEE21?logo=apachehive)
-![Hadoop](https://img.shields.io/badge/Hadoop-3.x-66CCFF?logo=apachehadoop)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi)
-![ECharts](https://img.shields.io/badge/ECharts-5.5-AA344D)
-![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python)
+Kafka · Flink SQL 1.20 · Hive · Hadoop 3.5 · FastAPI · ECharts 5.5 · Python
 
----
+## 跑起来的效果
 
-## 系统架构
+**简易大屏** (`localhost:8002`) — 两个直播间的在线趋势、弹幕、GMV
+
+![simple-1](docs/screenshots/simple_1.png)
+![simple-2](docs/screenshots/simple_2.png)
+
+**企业大屏** (`localhost:8002/enterprise`) — 3个标签页，10种图表，带JWT登录
+
+![enterprise-1](docs/screenshots/enterprise_1.png)
+![enterprise-2](docs/screenshots/enterprise_2.png)
+![enterprise-flink](docs/screenshots/enterprise_flink.png)
+
+## 数据怎么走的
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   抖音直播平台                            │
-│  live.douyin.com/994154756317 (影视飓风)                  │
-│  live.douyin.com/646454278948 (与晖同行)                  │
-└──────────┬─────────────────────┬────────────────────────┘
-           │ HTTP API (1s轮询)     │ WebSocket (实时推送)
-           ▼                      ▼
-┌────────────────────┐  ┌──────────────────────────┐
-│ douyin_full_       │  │ douyin_multi_room.py     │
-│ crawler.py         │  │ • 弹幕/礼物/进场/统计     │
-│ • 41字段房间信息    │  │ • Protobuf协议解析        │
-│ • ThreadPool并行   │  │ • 每房间独立线程+自动重连  │
-└────────┬───────────┘  └──────────┬───────────────┘
-         │                         │
-         ▼                         ▼
-┌────────────────────────────────────────────────────────┐
-│              Apache Kafka (3节点集群)                    │
-│  live_room_info  │  live_danmaku  │  live_gifts        │
-└────────┬───────────────────────────────────────────────┘
-         │
-    ┌────┴──────────┐
-    ▼               ▼
-┌────────────┐ ┌─────────────────────────────────────────┐
-│ realtime_  │ │  kafka_to_mysql.py                       │
-│ processor  │ │  • 消费3个Topic → MySQL 3张表             │
-│ .py        │ │  • 60秒窗口聚合 → live_aggregates         │
-│ • GMV预估  │ │  • 每100条batch commit                    │
-│ • CEP告警  │ └──────────────┬──────────────────────────┘
-└────────────┘                │
-                    ┌─────────┴──────────┐
-                    ▼                    ▼
-              ┌───────────┐     ┌──────────────────────┐
-              │ hive_etl  │     │ FastAPI (app.py)     │
-              │ .py       │     │ • 30个REST API       │
-              │ MySQL→    │     │ • JWT认证            │
-              │ HDFS→Hive │     │ • NLP+推荐+分析       │
-              └─────┬─────┘     └──────────┬───────────┘
-                    │                      │
-                    ▼                      ▼
-              ┌───────────┐     ┌──────────────────────┐
-              │ Hive数仓   │     │ ECharts大屏           │
-              │ ODS→DWD→  │     │ / → 简易大屏          │
-              │ DWS→ADS   │     │ /enterprise → 企业大屏 │
-              │ ORC存储   │     │ 12s刷新+独立分步加载   │
-              └───────────┘     └──────────────────────┘
+抖音直播 (HTTP API + WebSocket)
+  → Kafka (3个Topic, 3节点)
+    → Flink SQL (Event Time + Watermark 5s + 1min TUMBLE窗口)
+      → JDBC直写MySQL
+    → kafka_to_mysql.py (备用管道, 也写MySQL)
+      → FastAPI (30个接口)
+        → ECharts大屏 (12s刷新)
 ```
 
-### 数据流 (Lambda 架构)
-
-- **实时链路 (秒级)**: 抖音API → Kafka → kafka_to_mysql.py → MySQL → FastAPI → 浏览器
-- **离线链路 (分钟级)**: MySQL → hive_etl.py → HDFS → Hive (ODS→DWD→DWS→ADS)
-
----
+另外还有一条离线链路：MySQL → HDFS → Hive 四层数仓 (ODS/DWD/DWS/ADS)。
 
 ## 项目结构
 
 ```
-live-ecommerce-analysis/
-├── config.py                      # 统一配置（环境变量注入）
-├── .env.example                   # 环境变量模板
-├── .gitignore
-│
-├── crawler/                       # 数据采集层
-│   ├── douyin_full_crawler.py     # HTTP全量采集 (41字段, 1s间隔)
-│   ├── douyin_multi_room.py       # WebSocket弹幕/礼物采集 (Protobuf)
-│   ├── douyin_danmaku_crawler.py  # WS独立采集脚本
-│   ├── bilibili_multi_crawler.py  # B站扩展采集
-│   ├── run_danmaku.bat            # Windows快速启动
-│   └── DouyinLiveWebFetcher/      # 抖音WS协议库 (签名+Protobuf)
-│
-├── pipeline/                      # 数据管道层
-│   ├── kafka_to_mysql.py          # Kafka消费→MySQL入库+60s窗口聚合
-│   ├── realtime_processor.py      # 实时计算: GMV估算+CEP异常告警
-│   ├── flink_realtime.py          # Python窗口聚合 (Flink模拟版,已由flink_jobs/替代)
-│   ├── hive_etl.py                # Hive数仓ETL: MySQL→HDFS→Hive
-│   └── generate_product_data.py   # 商品/订单数据生成器 (Faker)
-│
-├── backend/                       # 业务应用层
-│   ├── app.py                     # FastAPI主后端 (端口8002, 30个API)
-│   ├── nlp_analysis.py            # NLP: 情感分析+关键词+词云+四象限
-│   ├── analytics_advanced.py      # 高级分析: RFM+漏斗+留存+用户旅程
-│   ├── recommendation.py          # 推荐: 协同过滤+关联规则+销量预测
-│   ├── dashboard.html             # 简易大屏 (无需登录)
-│   └── dashboard_enterprise.html  # 企业大屏 (3Tab/10图表/JWT认证)
-│
-├── sql/
-│   └── hive_warehouse.sql         # Hive数仓DDL (ODS/DWD/DWS/ADS)
-│
-├── scripts/
-│   ├── start_all.sh               # VM端一键启动集群服务
-│   └── find_live.py               # 搜索抖音直播间ID
-│
-├── data_simulator/                # 数据模拟器 (预留)
-├── docs/                          # 文档
-├── flink_jobs/                    # Flink SQL (Event Time+Watermark+JDBC)
-│   ├── realtime_aggregation.sql   #   主作业: Kafka→TUMBLE窗口→MySQL
-│   ├── setup_connectors.sh        #   一键下载Kafka+JDBC+MySQL连接器
-│   └── submit_flink_job.sh        #   提交脚本 (支持实时/回放模式)
-├── frontend/                      # 前端 (预留)
-│
-├── start_silent.vbs               # Windows一键静默启动
-└── README.md
+crawler/        数据采集 (HTTP轮询 + WebSocket长连接)
+pipeline/       数据管道 (Kafka消费 + Hive ETL + 数据生成)
+backend/        应用层 (FastAPI + NLP + 推荐 + 大屏HTML)
+flink_jobs/     Flink SQL作业 (Event Time + TUMBLE窗口 + JDBC Sink)
+sql/            Hive数仓建表DDL
+scripts/        集群启动脚本
+config.py       统一配置 (环境变量注入, 无硬编码密码)
 ```
 
----
+## 怎么跑
 
-## 界面展示
-
-### 实时数据大屏
-
-![简易大屏](docs/screenshots/dashboard_simple.png)
-
-![简易大屏-数据](docs/screenshots/dashboard_simple2.png)
-
-### 企业级分析大屏（带JWT登录）
-
-![企业大屏](docs/screenshots/dashboard_enterprise.png)
-
-![企业大屏-多标签](docs/screenshots/dashboard_enterprise2.png)
-
-### Flink WebUI — 实时计算作业监控
-
-![Flink Dashboard](docs/screenshots/flink_webui.png)
-
----
-
-## 核心功能
-
-### 1. 实时数据采集
-- HTTP API 每 1 秒轮询双直播间，采集 41 个字段（在线人数、点赞、标题、购物车状态等）
-- WebSocket 长连接实时接收弹幕、礼物、用户进场消息，Protobuf 协议解析
-- 断线自动重连机制（5-15秒恢复），独立线程互不干扰
-
-### 2. 实时计算引擎
-- 60 秒滑动窗口聚合：在线均值/峰值、弹幕速率、GMV 预估
-- 4 条 CEP 规则异常检测：在线骤降 30%、飙涨 50%、GMV 翻倍、刷屏 (>100条/分钟)
-- 已累计产出 1,900+ 条告警记录
-
-### 3. 离线数据仓库
-- MySQL → HDFS → Hive 四层数仓 (ODS/DWD/DWS/ADS)
-- ODS 层 TextFile 保留原始数据，上层 ORC 列存加速查询
-- 支持全量和增量 ETL 模式
-
-### 4. NLP 弹幕分析
-- SnowNLP 情感分析 (正面/中性/负面三级)
-- jieba TF-IDF 关键词提取 (Top 50)
-- 词云生成 (Top 100)
-- 情感四象限用户分群 (忠实粉丝/情绪用户/路人好感/流失风险)
-- 30 秒内存 TTL 缓存，首次请求 ~3 秒，缓存命中 <50ms
-
-### 5. 用户分析
-- RFM 四群分群 (核心粉丝/新晋活跃/沉睡用户/流失风险)
-- 6 层转化漏斗 (独立观众→发弹幕→活跃互动→高活跃→送礼→核心用户)
-- Day1/3/7 留存率分析
-- 用户活跃分层 (超级粉/铁杆粉/忠实粉丝/活跃观众/路人)
-
-### 6. 推荐与预测
-- 协同过滤推荐 (用户-商品共现矩阵)
-- 关联规则挖掘 (支持度/置信度/提升度)
-- 7 天销量预测 (移动平均 + 指数平滑 + 线性回归)
-
-### 7. 可视化大屏
-- ECharts 5.5 企业大屏，3 标签页 / 10 种图表
-- 独立分步加载架构：解决定时刷新 × 异步加载的竞态条件
-- 12 秒自动刷新，同房间定时刷新零 DOM 替换、零视觉闪烁
-- 30 个 RESTful API (FastAPI + JWT 认证)
-
----
-
-## 数据库设计
-
-| 表名 | 行数 | 来源 | 用途 |
-|------|------|------|------|
-| `live_metrics` | 12万+ | HTTP API → Kafka | 房间指标 (在线/点赞/标题等11字段) |
-| `danmaku` | 10万+ | WebSocket → Kafka | 弹幕+礼物明细 |
-| `room_stats` | 2万+ | WebSocket → Kafka | WS 推送在线统计 |
-| `live_realtime_metrics` | 500+ | realtime_processor | 60s 窗口聚合指标 |
-| `live_alerts` | 1,900+ | realtime_processor CEP | 异常告警记录 |
-| `live_aggregates` | — | kafka_to_mysql | 管道层窗口聚合 |
-| `products` | 415件 | generate_product_data | 商品信息 |
-| `orders` | 7,146笔 | generate_product_data | 模拟订单 |
-
----
-
-## 快速开始
-
-### 环境要求
-
-- **集群**: 3 节点 Hadoop + Kafka (CentOS 7 VM)
-- **开发机**: Windows 11, Python 3.12
-- **数据库**: MySQL 8.0 (hadoop01:3306)
-
-### 1. 配置
+前提：3台VM已配好Hadoop/Kafka/Flink/Hive/MySQL。
 
 ```bash
-cp .env.example .env
-# 编辑 .env 填入真实密码
-```
+# 1. VM端启动集群
+ssh hadoop01 "bash scripts/start_all.sh"
 
-### 2. 启动集群服务 (VM端)
+# 2. Windows端启动数据管道 (3个终端)
+python crawler/douyin_full_crawler.py     # HTTP采集
+python crawler/douyin_multi_room.py       # WebSocket弹幕采集
+python pipeline/kafka_to_mysql.py         # Kafka消费入库
 
-```bash
-ssh hadoop01
-bash scripts/start_all.sh
-# 依次启动: Hadoop HDFS → MySQL → Zookeeper → Kafka → Hive Metastore → HiveServer2
-```
-
-### 3. 启动数据管道 (Windows端)
-
-```bash
-# 终端1: 启动采集器 (HTTP + WebSocket)
-python crawler/douyin_full_crawler.py
-
-# 终端2: Kafka消费入库
-python pipeline/kafka_to_mysql.py
-
-# 终端3: 实时处理+CEP告警 (可选)
-python pipeline/realtime_processor.py
-```
-
-或一键启动:
-```bash
-start_silent.vbs
-```
-
-### 4. 启动后端 & 大屏
-
-```bash
+# 3. 启动后端
 python backend/app.py
-# 简易大屏: http://localhost:8002
-# 企业大屏: http://localhost:8002/enterprise (admin / admin123)
-# API文档:  http://localhost:8002/docs
+
+# 4. 打开浏览器
+# http://localhost:8002          简易大屏
+# http://localhost:8002/enterprise  企业大屏 (admin/admin123)
 ```
 
-### 5. 离线数仓ETL (按需执行)
+## Flink SQL作业
 
-```bash
-# 全量导入
-python pipeline/hive_etl.py --full
+`flink_jobs/realtime_aggregation.sql` — 核心实时计算：
 
-# 增量导入 (最近1小时)
-python pipeline/hive_etl.py
-```
+- 建表映射Kafka的`live_danmaku` topic
+- Event Time取弹幕的`timestamp`字段，5秒Watermark处理乱序
+- 1分钟TUMBLE窗口，按房间分组COUNT
+- JDBC Sink直写MySQL `live_flink_metrics`表
 
-### 6. 生成模拟商品/订单数据
+踩过的主要坑：
 
-```bash
-python pipeline/generate_product_data.py
-```
+1. **TO_TIMESTAMP不认ISO 8601的T分隔符** — 必须显式给格式串 `'yyyy-MM-dd''T''HH:mm:ss.SSSSSS'`
+2. **MySQL远程权限** — TaskManager在别的节点连不上MySQL，需要`CREATE USER ... @'%'`
+3. **pymysql的pyformat吃掉DATE_FORMAT的%** — 新增`db_query_raw`绕过参数替换
 
----
+## 数据说明
 
-## 技术决策
+- 房间指标和弹幕：从抖音两个直播间（影视飓风、与晖同行）实时采集，累计30万+条
+- 商品和订单：Faker模拟生成（抖音不公开交易API，无法爬真实订单）
+- `demo_proof.py` 可以验证弹幕数据的真实性
 
-| 决策 | 选择 | 理由 |
-|------|------|------|
-| 消息队列 | Kafka | 高吞吐、持久化、3节点高可用 |
-| 实时计算 | Python 模拟 Flink | 快速原型验证，核心概念 (窗口/CEP/状态) 一致 |
-| 离线数仓 | Hive + ORC | 列存压缩，SQL 分析友好 |
-| 后端框架 | FastAPI | 异步高性能，自动生成 Swagger 文档 |
-| 可视化 | ECharts 5.5 | 功能丰富，社区活跃 |
-| 架构模式 | Lambda | 实时+离线双链路互补 |
-| NLP | SnowNLP + jieba | 中文友好，离线可用 |
+## 已知问题
 
-### 已知局限 & 改进方向
-
-- **Flink 模拟版** → 改用真正的 Flink SQL，支持 Checkpoint 故障恢复
-- **MySQL** → ClickHouse/Doris，OLAP 查询快 100 倍
-- **单文件 HTML** → React/Vue 组件化，提高可维护性
-- **模拟商品/订单数据** → 对接真实交易数据或公开数据集
-- **无监控告警** → Prometheus + Grafana 采集管道指标
-
----
-
-## 性能指标
-
-| 指标 | 数值 |
-|------|------|
-| 端到端延迟 | < 5 秒 (抖音 API → 浏览器大屏) |
-| HTTP 采集间隔 | 1 秒 (双房间并行) |
-| Kafka 消费延迟 | < 2 秒 |
-| API 查询响应 | < 200ms (NLP 首次约 3 秒) |
-| 累计数据量 | 23 万+ 条 |
-| 日均入库 | 5,000+ 条 |
-
----
-
-## License
-
-MIT — 本项目为校内生产实习成果，仅供学习和研究使用。
+- Flink SQL目前用Processing Time做窗口（Event Time+Watermark版本SQL已写好，但历史数据回放需要`scan.bounded.mode`配合，实时数据下直接可用）
+- 商品/订单数据是模拟的
+- 单文件HTML大屏可维护性差，后续考虑用Vue重构
